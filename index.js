@@ -1,8 +1,8 @@
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js')
 const axios = require('axios')
 
-const TOKEN = 'YOUR_BOT_TOKEN_HERE'
-const ROBLOSECURITY = 'YOUR_ROBLOSECURITY_HERE'
+const TOKEN = process.env.TOKEN
+const ROBLOSECURITY = process.env.ROBLOSECURITY
 const PREFIX = '!'
 
 const client = new Client({
@@ -13,13 +13,8 @@ const client = new Client({
     ]
 })
 
-// resolve roblox username -> userId
 async function getUserId(input) {
-    // if it's already a number, return it
-    if (/^\d+$/.test(input)) {
-        return parseInt(input)
-    }
-    // otherwise look up by username
+    if (/^\d+$/.test(input)) return parseInt(input)
     const res = await axios.post('https://users.roblox.com/v1/usernames/users', {
         usernames: [input],
         excludeBannedUsers: false
@@ -29,7 +24,6 @@ async function getUserId(input) {
     return data[0].id
 }
 
-// check PSN linkage
 async function checkPSN(userId) {
     const res = await axios.post(
         'https://apis.roblox.com/user-profile-api/v1/user/profiles/get-profiles',
@@ -55,7 +49,6 @@ async function checkPSN(userId) {
 
     const profiles = res.data.profileDetails
     if (!profiles || profiles.length === 0) return null
-
     const profile = profiles.find(p => p.userId === userId)
     if (!profile) return null
 
@@ -72,7 +65,7 @@ async function checkPSN(userId) {
 }
 
 client.on('ready', () => {
-    console.log(`Logged in as ${client.user.tag}`)
+    console.log(`Bot online: ${client.user.tag}`)
 })
 
 client.on('messageCreate', async (message) => {
@@ -84,54 +77,28 @@ client.on('messageCreate', async (message) => {
 
     if (command === 'check') {
         const input = args[0]
-        if (!input) {
-            return message.reply('usage: `!check <username or userId>`')
-        }
+        if (!input) return message.reply('usage: `!check <username or userId>`')
 
         const loading = await message.reply('🔍 checking...')
 
         try {
             const userId = await getUserId(input)
-            if (!userId) {
-                return loading.edit('❌ could not find that roblox user.')
-            }
+            if (!userId) return loading.edit('❌ roblox user not found.')
 
             const result = await checkPSN(userId)
-            if (!result) {
-                return loading.edit('❌ failed to fetch profile data.')
-            }
-
-            const profileUrl = `https://www.roblox.com/users/${userId}/profile`
+            if (!result) return loading.edit('❌ failed to fetch profile.')
 
             const embed = new EmbedBuilder()
                 .setTitle(`${result.displayName} (@${result.username})`)
-                .setURL(profileUrl)
+                .setURL(`https://www.roblox.com/users/${userId}/profile`)
                 .setColor(result.linked ? 0x00b0f4 : 0x747f8d)
-                .addFields(
-                    {
-                        name: 'PSN Linked',
-                        value: result.linked ? '✅ Yes' : '❌ No',
-                        inline: true
-                    },
-                    {
-                        name: 'PSN Username',
-                        value: result.platformName
-                            ? `[${result.platformName}](https://www.psntools.com/psn/checker/${result.platformName})`
-                            : 'N/A',
-                        inline: true
-                    },
-                    {
-                        name: 'Platform ID',
-                        value: result.platformId ? String(result.platformId) : 'N/A',
-                        inline: true
-                    },
-                    {
-                        name: 'Roblox ID',
-                        value: String(userId),
-                        inline: true
-                    }
-                )
                 .setThumbnail(`https://www.roblox.com/headshot-thumbnail/image?userId=${userId}&width=150&height=150&format=png`)
+                .addFields(
+                    { name: 'PSN Linked', value: result.linked ? '✅ Yes' : '❌ No', inline: true },
+                    { name: 'PSN Username', value: result.platformName ? `[${result.platformName}](https://www.psntools.com/psn/checker/${result.platformName})` : 'N/A', inline: true },
+                    { name: 'Platform ID', value: result.platformId ? String(result.platformId) : 'N/A', inline: true },
+                    { name: 'Roblox ID', value: String(userId), inline: true }
+                )
                 .setFooter({ text: 'PSN Checker' })
                 .setTimestamp()
 
@@ -139,7 +106,7 @@ client.on('messageCreate', async (message) => {
 
         } catch (err) {
             console.error(err)
-            await loading.edit('❌ something went wrong. check console.')
+            await loading.edit('❌ error. check railway logs.')
         }
     }
 })
