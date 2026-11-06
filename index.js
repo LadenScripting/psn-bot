@@ -67,35 +67,72 @@ async function checkPSN(userId) {
 async function getPSNProfile(psnUsername) {
     try {
         const res = await axios.get(
-            `https://psnprofiles.com/${psnUsername}`,
+            `https://tracker.gg/psn/profile/psn/${encodeURIComponent(psnUsername)}/overview`,
             {
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Referer': 'https://tracker.gg/',
                 }
             }
         )
         const html = res.data
 
-        const country = html.match(/class="flag-icon flag-icon-([a-z]{2})"/)?.[1]?.toUpperCase() || null
-        const level = html.match(/class="level">(\d+)</)?.[1] || null
-        const platinum = html.match(/class="trophy platinum"[^>]*>(\d+)/)?.[1] || null
-        const gold = html.match(/class="trophy gold"[^>]*>(\d+)/)?.[1] || null
-        const silver = html.match(/class="trophy silver"[^>]*>(\d+)/)?.[1] || null
-        const bronze = html.match(/class="trophy bronze"[^>]*>(\d+)/)?.[1] || null
-        const avatarUrl = html.match(/<img[^>]+id="avatar"[^>]+src="([^"]+)"/)?.[1] || null
+        console.log('[TRACKER HTML SAMPLE]', html.substring(0, 3000))
 
-        return {
-            country,
-            level,
-            platinum,
-            gold,
-            silver,
-            bronze,
-            avatarUrl,
-        }
+        const country = html.match(/"countryCode"\s*:\s*"([A-Z]{2})"/)?.[1]
+            || html.match(/data-country="([A-Z]{2})"/)?.[1]
+            || null
+
+        const level = html.match(/"level"\s*:\s*(\d+)/)?.[1]
+            || null
+
+        const platinum = html.match(/"platinum"\s*:\s*(\d+)/)?.[1]
+            || null
+
+        const gold = html.match(/"gold"\s*:\s*(\d+)/)?.[1]
+            || null
+
+        const silver = html.match(/"silver"\s*:\s*(\d+)/)?.[1]
+            || null
+
+        const bronze = html.match(/"bronze"\s*:\s*(\d+)/)?.[1]
+            || null
+
+        const avatarUrl = html.match(/"avatarUrl"\s*:\s*"([^"]+)"/)?.[1]
+            || null
+
+        return { country, level, platinum, gold, silver, bronze, avatarUrl }
+
     } catch (err) {
-        console.error('PSN profile scrape failed:', err?.message)
-        return null
+        console.error('tracker.gg failed:', err?.message)
+
+        // fallback — psnprofiles search
+        try {
+            const res2 = await axios.get(
+                `https://psnprofiles.com/search/users?q=${encodeURIComponent(psnUsername)}`,
+                {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json, text/javascript, */*',
+                        'Referer': 'https://psnprofiles.com/',
+                    }
+                }
+            )
+            const html2 = res2.data
+            console.log('[PSNPROFILES SEARCH SAMPLE]', html2.substring(0, 2000))
+
+            const country = html2.match(/class="flag flag-([a-z]{2})"/)?.[1]?.toUpperCase()
+                || null
+
+            return { country, level: null, platinum: null, gold: null, silver: null, bronze: null, avatarUrl: null }
+
+        } catch (err2) {
+            console.error('fallback also failed:', err2?.message)
+            return null
+        }
     }
 }
 
@@ -175,7 +212,7 @@ client.on('messageCreate', async (message) => {
                         embed.addFields({ name: '🌍 Location', value: countryDisplay, inline: true })
                     }
                     if (psnProfile.level) {
-                        embed.addFields({ name: '🎮 PSN Level', value: psnProfile.level, inline: true })
+                        embed.addFields({ name: '🎮 PSN Level', value: String(psnProfile.level), inline: true })
                     }
                     const hasAnyTrophy = psnProfile.platinum || psnProfile.gold || psnProfile.silver || psnProfile.bronze
                     if (hasAnyTrophy) {
